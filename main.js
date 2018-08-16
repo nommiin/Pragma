@@ -1,13 +1,67 @@
 Pragma = {
+	Util: {
+		Convert: function(v) {
+			let praNumber = true, praInput = v;
+			if (typeof v == "string") {
+				praInput = praInput.trim();
+				for(var i = 0; i < praInput.length; i++) {
+					if (praInput.charCodeAt(i) < 48 || praInput.charCodeAt(i) > 57) {
+						praNumber = false;
+						break;
+					}
+				}
+			}
+			return (praNumber ? parseFloat(v) : praInput);
+		}
+	},
+	Runner: {
+		Pointer: 0,
+		Process: function(praBytecode) {
+			let praTimer = new Date();
+			while (Pragma.Runner.Pointer < praBytecode.length) {
+				switch (praBytecode[Pragma.Runner.Pointer]) {
+					case 0: { // push
+						Pragma.Runner.Stack.push(praBytecode[++Pragma.Runner.Pointer]);
+						break;
+					}
+
+					case 1: { // locl
+						Pragma.Runner.Local[praBytecode[++Pragma.Runner.Pointer]] = Pragma.Runner.Stack.pop();
+						break;
+					}
+
+					case 2: { // glob
+						Pragma.Runner.Global[praBytecode[++Pragma.Runner.Pointer]] = Pragma.Runner.Stack.pop();
+						break;
+					}
+
+					case 3: { // call
+						let praFunction = praBytecode[++Pragma.Runner.Pointer], praArguments = [];
+						for(let i = 0, _i = Pragma.Runner.Stack.pop(); i < _i; i++) {
+							praArguments.push(Pragma.Runner.Stack.pop());
+						}
+						break;
+					}
+				}
+				Pragma.Runner.Pointer++;
+
+				if (new Date().getTime() - praTimer > 1000) {
+					console.error("Runner has timed out in 1000ms");
+					break;
+				}
+			}
+			console.log(`Bytecode was successfully ran in ${new Date().getTime() - praTimer}ms`);
+		},
+		Stack: [],
+		Local: {},
+		Global: {}
+	},
 	Runtime: {
 		Locals: {
-			List: [],
+			List: {},
 			Add: function(name, value) {
 				if (name in Pragma.Compiler.Tokens == false) {
-					Pragma.Runtime.Locals.List.push({
-						Name: name,
-						Value: value
-					});
+					Pragma.Runtime.Locals.List[name] = Pragma.Util.Convert(value);
 				} else {
 					Pragma.Compiler.Error(`Unable to define local variable with reserved name: ${name} (Pragma.Compiler.Tokens)`);
 				}
@@ -17,10 +71,7 @@ Pragma = {
 			List: [],
 			Add: function(name, value) {
 				if (name in Pragma.Compiler.Tokens == false) {
-					Pragma.Runtime.Globals.List.push({
-						Name: name,
-						Value: value
-					});
+					Pragma.Runtime.Globals.List.name = Pragma.Util.Convert(value);
 				} else {
 					Pragma.Compiler.Error(`Unable to define global variable with reserved name: ${name} (Pragma.Compiler.Tokens)`);
 				}
@@ -41,6 +92,29 @@ Pragma = {
 					Pragma.Compiler.Error(`Unable to define function with reserved name: ${name} (Pragma.Compiler.Tokens)`);
 				}
 			}	
+		},
+		Instructions: {
+			Add: function(n, d=[]) {
+				Pragma.Runtime.Bytecode.push(Pragma.Runtime.Instructions.Find(n));
+				if (d.length > 0) {
+					d.forEach(function (e) {
+						Pragma.Runtime.Bytecode.push(Pragma.Util.Convert(e));
+					});
+				}
+			},
+			Find: function(n) {
+				if (n in Pragma.Runtime.Instructions.List == false) {
+					Pragma.Compiler.Warning(`Could not find unsupported instruction: ${n}`);
+					return -1;
+				}
+				return Pragma.Runtime.Instructions.List[n];
+			},
+			List: {
+				"push": 0,
+				"locl": 1,
+				"glob": 2,
+				"call": 3
+			}
 		},
 		Bytecode: []
 	},
@@ -67,12 +141,29 @@ Pragma = {
 			console.error(`An error has occured at L${praLine}, C${Pragma.Compiler.Index - Pragma.Compiler.Lines[praLine - 1]}:\n${error}`);
 			Pragma.Compiler.Continue = false;
 		},
+		Warning: function(warn) {
+			console.error(`Compiler warning has been recieved:\n${warn}`);
+		},
 		MoveTo: function(find, start=true) {
 			let praStart = Pragma.Compiler.Index, praChars = (typeof find == "object" ? find : [find]);
 			for(Pragma.Compiler.Index = Pragma.Compiler.Index; Pragma.Compiler.Index < Pragma.Compiler.Input.length; Pragma.Compiler.Index++) {
 				for(var praChar in praChars) {
 					if (Pragma.Compiler.Input.slice(Pragma.Compiler.Index, Pragma.Compiler.Index + praChars[praChar].length) == praChars[praChar]) {
 						return (start ? praStart : Pragma.Compiler.Index);
+					}
+				}
+			}
+			Pragma.Compiler.Error(`Could not find characters: ${find} inside of input`);
+			return -1;
+		},
+		FindAt: function(find) {
+			let praChars = (typeof find == "object" ? find : [find]);
+			for(var i = Pragma.Compiler.Index; i < Pragma.Compiler.Input.length; i++) {
+				for(var praChar in praChars) {
+					console.log(Pragma.Compiler.Input.slice(i, i + praChar.length) == praChar);
+					if (Pragma.Compiler.Input.slice(i, i + praChar.length) == praChar) {
+						console.log("found it!");
+						return i;
 					}
 				}
 			}
@@ -90,10 +181,37 @@ Pragma = {
 		},
 		Tokens: {
 			"var": function() {
-				let praName = Pragma.Compiler.Input.slice(Pragma.Compiler.MoveTo("="), Pragma.Compiler.Index++).trim(),
+				// TODO: Fix this!!!
+				let praAssignment = Pragma.Compiler.FindAt("="),
+					praName = Pragma.Compiler.Input.slice(Pragma.Compiler.MoveTo("="), Pragma.Compiler.Index++).trim(),
 					praValue = Pragma.Compiler.Input.slice(Pragma.Compiler.MoveTo([";", ","]), Pragma.Compiler.Index).trim();
-				console.log(`var = [Name: ${praName}, Value: ${praValue}]`);
+				/*switch (""){//Pragma.Compiler.Input[praAssignment - 1]) {
+					case "+": {
+						console.log(Pragma.Runtime.Locals.List)
+						if (praName in Pragma.Runtime.Locals.List) {
+							console.log("add")
+						} else {
+							Pragma.Compiler.Error(`Could not add to uninitalized variable.`);
+						}
+						break;
+					}
+
+					case "-": {
+						break;
+					}
+
+					case "/=": {
+						break;
+					}
+
+					case "*=": {
+						break;
+					}
+				}*/
+				
 				Pragma.Runtime.Locals.Add(praName, praValue);
+				Pragma.Runtime.Instructions.Add("push", [praValue]);
+				Pragma.Runtime.Instructions.Add("locl", [praName]);
 				if (Pragma.Compiler.Input[Pragma.Compiler.Index] == ",") {
 					Pragma.Compiler.Index++;
 					this.var();
@@ -104,6 +222,8 @@ Pragma = {
 					praValue = Pragma.Compiler.Input.slice(Pragma.Compiler.MoveTo([";", ","]), Pragma.Compiler.Index).trim();
 				console.log(`globalvar = [Name: ${praName}, Value: ${praValue}]`);
 				Pragma.Runtime.Locals.Add(praName, praValue);
+				Pragma.Runtime.Instructions.Add("push", [praValue]);
+				Pragma.Runtime.Instructions.Add("glob", [praName]);
 				if (Pragma.Compiler.Input[Pragma.Compiler.Index] == ",") {
 					Pragma.Compiler.Index++;
 					this.globalvar();
@@ -114,6 +234,7 @@ Pragma = {
 					praArguments = Pragma.Compiler.Clean(Pragma.Compiler.Input.slice(Pragma.Compiler.MoveTo(")"), Pragma.Compiler.Index).trim().split(","));
 				console.log(`function = [Name: "${praName}", Arguments: [${praArguments}]]`);
 				Pragma.Runtime.Functions.Add(praName, praArguments);
+				//Pragma.Runtime.Bytecode.push()
 			}
 		}
 	},
@@ -156,6 +277,12 @@ Pragma = {
 							} else if (praArguments.length > praFunction.MaxArguments) {
 								Pragma.Compiler.Error(`Function call recieved more arguments than required (${praArguments.length} recieved, at least ${praFunction.MinArguments} expected)`);
 							}
+
+							for(var j = praArguments.length - 1; j >= 0; j--) {
+								Pragma.Runtime.Instructions.Add("push", [praArguments[j]]);
+							}
+							Pragma.Runtime.Instructions.Add("push", [praArguments.length]);
+							Pragma.Runtime.Instructions.Add("call", [praFunction.Name]);
 							praFound = true;
 							break;
 						}
