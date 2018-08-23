@@ -1,0 +1,28 @@
+<html>
+    <head>
+        <script type="text/javascript" src="main.js"></script>
+    </head>
+    <body>
+        <script type="text/pragma" id="pragma-script">
+            local a = 0, b = 0;
+            global b = 0;
+        </script>
+        <script type="text/javascript">
+            /*let praMain = new Pragma.Compiler.Compile(document.getElementById("pragma-script").innerHTML);
+            praMain.Compile();   */
+            
+            let praDebug = new Pragma.Compiler(`
+            function add(a, b) {
+                return a + b;
+            }
+            
+            local b = 5 + add(2, 2) + 1;
+            `);
+            let praBytecode = praDebug.Compile();
+            let praRunner = new Pragma.Runner(praBytecode);
+            praRunner.Run();
+            console.log(new Pragma.Debugger(praBytecode).Output());
+            
+        </script>
+    </body>
+</html>
